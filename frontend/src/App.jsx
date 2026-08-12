@@ -10,7 +10,7 @@ import { AuthModal } from './components/AuthModal';
 import { ProfileDrawer } from './components/ProfileDrawer';
 import { SessionHistoryModal } from './components/SessionHistoryModal';
 import { FriendsDrawer } from './components/FriendsDrawer';
-import { getSavedUser, getActiveSession, updateUserStatus } from './api';
+import { getSavedUser, setSavedUser, clearSavedUser, getActiveSession, updateUserStatus } from './api';
 import { soundFX } from './utils/soundFX';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -173,12 +173,14 @@ export default function App() {
   const handleAuthSuccess = (user) => {
     soundFX.playSoftClick();
     setCurrentUser(user);
+    setSavedUser(user);
     showToast(`Signed in as ${user.name}`);
   };
 
   const handleLoggedOut = () => {
     soundFX.playSoftClick();
     setCurrentUser(null);
+    clearSavedUser();
     setMatchData(null);
     setCurrentView('explore');
     showToast('Signed out of StudyMatch');
