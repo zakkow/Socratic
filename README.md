@@ -30,7 +30,7 @@ Socratic is a collaborative study application designed to connect students worki
 ```
                         ┌──────────────────────────────────────────┐
                         │              React + Vite UI             │
-                        │        (Neo-Brutalist CSS System)        │
+                        │                                          │
                         └────────────────────┬─────────────────────┘
                                              │
                                      HTTP / WebSockets
