@@ -16,7 +16,7 @@ import { CheckCircle2 } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('explore'); // 'explore' | 'questions' | 'match' | 'scratchpad'
-  const [currentUser, setCurrentUser] = useState(() => getSavedUser() || { id: 'user-demo-1', name: 'Student', email: 'student@stanford.edu', school_name: 'Stanford University', avatar_seed: 'bottts-1', is_verified: true });
+  const [currentUser, setCurrentUser] = useState(() => getSavedUser());
   const [classifiedTopic, setClassifiedTopic] = useState('');
   const [matchData, setMatchData] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState('all');
@@ -106,6 +106,10 @@ export default function App() {
 
   const handleOpenStruggleModal = (topicName = '') => {
     soundFX.playSoftClick();
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setInitialTopicName(topicName);
     setIsStruggleModalOpen(true);
   };
@@ -343,6 +347,7 @@ export default function App() {
         onUnreadCountChange={setUnreadCount}
         onRequestStudySession={(friend) => handleOpenStruggleModal(friend.name)}
         onStartDirectSession={handleStartDirectSession}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
 
       <SafetyModal

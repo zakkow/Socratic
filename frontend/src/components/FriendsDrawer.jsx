@@ -44,7 +44,8 @@ export function FriendsDrawer({
   currentUser,
   onUnreadCountChange,
   onRequestStudySession,
-  onStartDirectSession
+  onStartDirectSession,
+  onOpenAuthModal
 }) {
   const [activeTab, setActiveTab] = useState('friends'); // 'friends' | 'recent' | 'blocked' | 'requests' | 'dm'
   const [friends, setFriends] = useState([]);
@@ -74,7 +75,15 @@ export function FriendsDrawer({
   const chatEndRef = useRef(null);
 
   const fetchAllSocialData = async () => {
-    const userId = currentUser?.id || 'user-demo-1';
+    if (!currentUser?.id) {
+      setFriends([]);
+      setRecentPartners([]);
+      setFriendRequests({ incoming: [], outgoing: [] });
+      setBlockedUsers([]);
+      setIsLoading(false);
+      return;
+    }
+    const userId = currentUser.id;
     try {
       const [friendsData, recentData, reqsData, blockedData] = await Promise.all([
         getFriendsList(userId),
@@ -86,6 +95,7 @@ export function FriendsDrawer({
       setRecentPartners(Array.isArray(recentData) ? recentData : []);
       setFriendRequests(reqsData || { incoming: [], outgoing: [] });
       setBlockedUsers(Array.isArray(blockedData) ? blockedData : []);
+
       const incCount = Array.isArray(reqsData?.incoming) ? reqsData.incoming.length : 0;
       if (onUnreadCountChange) {
         onUnreadCountChange(incCount);
@@ -108,7 +118,8 @@ export function FriendsDrawer({
 
   // Fetch DM messages when selecting DM friend
   useEffect(() => {
-    const userId = currentUser?.id || 'user-demo-1';
+    if (!currentUser?.id) return;
+    const userId = currentUser.id;
     if (selectedDmFriend) {
       const fetchDM = async () => {
         try {
@@ -131,6 +142,26 @@ export function FriendsDrawer({
   }, [dmMessages.length, activeTab, selectedDmFriend]);
 
   if (!isOpen) return null;
+
+  if (!currentUser) {
+    return (
+      <div className="modal-overlay" onClick={onClose} style={{ justifyContent: 'flex-end', padding: 0 }}>
+        <div className="drawer-card" onClick={(e) => e.stopPropagation()} style={{ width: '440px', maxWidth: '100vw', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+          <Users size={48} style={{ color: 'var(--color-primary-deep)', marginBottom: '1rem' }} />
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Sign In Required
+          </h3>
+          <p style={{ fontSize: '0.88rem', color: 'var(--color-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+            Sign in with your school .edu email to connect with classmates, chat with friends, and view your study history.
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+            <button className="btn-secondary" onClick={onClose} style={{ flex: 1 }}>Close</button>
+            <button className="btn-primary" onClick={() => { onClose(); if (onOpenAuthModal) onOpenAuthModal(); }} style={{ flex: 1 }}>Sign In / Up</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const safeFriends = Array.isArray(friends) ? friends : [];
   const safeRecentPartners = Array.isArray(recentPartners) ? recentPartners : [];
