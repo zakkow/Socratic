@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+.venv/
+backend/.venv/
+env/
+venv/
+
+# Build & Dist
+frontend/dist/
+dist/
+build/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+studymatch.db
+studymatch_safety_test.db
+test_block_debug.db
+
+# Environment variables
+.env
+backend/.env
+
+# Python Bytecode & Cache
+__pycache__/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
