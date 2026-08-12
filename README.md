@@ -112,6 +112,8 @@ The web client will start at `http://localhost:5173`.
 - **Frontend (Netlify / Vercel)**: Includes a `netlify.toml` for single-page routing. Set `VITE_API_BASE_URL` to your backend URL in environment settings.
 - **Backend (Render / Railway)**: Includes a `Procfile` (`uvicorn main:app --host 0.0.0.0 --port $PORT`). Set `GROQ_API_KEY` in server environment settings.
 
+> **Note on cold starts**: The backend is hosted on Render's free tier, which spins down after 15 minutes of inactivity. The first request after a period of inactivity may take up to 60 seconds to respond while the server wakes up. Subsequent requests are fast. For demos, visit the site a minute or two before presenting to warm the backend up.
+
 ---
 
 ## License
