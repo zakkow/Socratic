@@ -1,36 +1,36 @@
-# 🏛️ Socratic
+# Socratic
 
-> **Don't just get the answer. Master the concept.**
+> Don't just get the answer. Master the concept.
 
-Socratic is a modern, AI-powered collaborative learning platform built to connect students working through difficult academic concepts. Rather than spoon-feeding homework answers, Socratic enforces **Socratic pedagogy**—guiding students step-by-step through interactive peer matching, real-time synchronized whiteboards, and a hybrid tiered AI tutoring engine.
-
----
-
-## 🌟 Key Features
-
-* **⚡ Hybrid Tiered AI Architecture**:
-  * **Edge / Local ML Classifier**: Uses a local `scikit-learn` TF-IDF vectorizer and cosine similarity matrix for sub-millisecond topic classification, catalog routing, and rule-based gibberish moderation.
-  * **Reasoning Tier (Groq Llama 3.3-70B)**: Unclassifiable or complex topics automatically escalate to Groq Llama 3.3-70B for intelligent academic verification and guided 4-step Socratic dialogue.
-* **🤝 Real-Time Peer Matching & Whiteboard**:
-  * Matches students studying identical course topics (`CS101`, `MATH201`, `CIV101`, `PHYS150`).
-  * Live synchronized canvas whiteboard supporting brush drawing, shape tools, and low-latency WebSocket stroke dispatches.
-* **📜 Public Community Solutions & Mutual Consent `(x/2)`**:
-  * End-of-session 5-star pedagogical ratings and mutual consent publishing `(2/2 for peers, 1/1 for AI)`.
-  * Automated AI quality inspection and search tag extraction (`#ChainRule`, `#Derivatives`, `#Recursion`).
-* **🛡️ Social Safety & Persistent Moderation**:
-  * Profanity content filter with real-time text redaction (`***`).
-  * Persistent user blocking with block guards on friend requests and a dedicated **Blocked Users Drawer** with 1-click unblocking.
-* **📱 Multi-Disciplinary Neo-Brutalist UI**:
-  * Bold black borders, vibrant color palette, floating multi-disciplinary academic chips (Math, CS, Literature, Civics, Science), and full WCAG AA contrast compliance.
+Socratic is a collaborative study application designed to connect students working through difficult academic concepts. Rather than providing direct answers, the platform focuses on guided learning through peer matching, synchronized whiteboards, and a hybrid AI tutoring system.
 
 ---
 
-## 🏗️ Architecture Overview
+## Features
+
+- **Hybrid AI Architecture**:
+  - **Local Classification Tier**: Uses a scikit-learn TF-IDF model for fast topic classification, catalog search, and input moderation.
+  - **Reasoning Tier (Groq Llama 3.3-70B)**: Escalates unclassified or complex topics to Groq Llama 3.3-70B for guided Socratic dialogue and step-by-step problem breakdown.
+- **Real-Time Peer Matching & Whiteboard**:
+  - Matches students working on the same course topics (CS101, MATH201, CIV101, PHYS150).
+  - Synchronized canvas whiteboard with brush drawing, shape tools, and low-latency WebSocket stroke sync.
+- **Public Solution History & Consent**:
+  - Mutual consent publishing requirement (2/2 for peer sessions, 1/1 for AI sessions).
+  - Automated solution tagging and search indexing for community review.
+- **Safety & Moderation**:
+  - Built-in profanity content filter.
+  - Persistent user blocking, block guards on friend requests, and a dedicated unblocking interface.
+- **Multi-Disciplinary Design**:
+  - Neo-Brutalist UI with high contrast compliance and multi-subject visual indicators across Math, Computer Science, Literature, Civics, and Sciences.
+
+---
+
+## Architecture
 
 ```
                         ┌──────────────────────────────────────────┐
                         │              React + Vite UI             │
-                        │    (Neo-Brutalist CSS Design System)     │
+                        │        (Neo-Brutalist CSS System)        │
                         └────────────────────┬─────────────────────┘
                                              │
                                      HTTP / WebSockets
@@ -40,94 +40,80 @@ Socratic is a modern, AI-powered collaborative learning platform built to connec
                         └──────────┬────────────────────┬──────────┘
                                    │                    │
               ┌────────────────────▼─────┐        ┌─────▼──────────────────┐
-              │  Local Scikit-Learn ML   │        │     Groq Llama 3.3     │
+              │   Local Scikit-Learn     │        │     Groq Llama 3.3     │
               │   TF-IDF Classifier      │        │    70B Reasoning AI    │
               └──────────────────────────┘        └────────────────────────┘
 ```
 
 ---
 
-## 🛠️ Technology Stack
+## Tech Stack
 
-- **Frontend**: React 18, Vite, Lucide Icons, Web Audio API (`soundFX.js`), HTML5 Canvas
+- **Frontend**: React 18, Vite, Lucide Icons, HTML5 Canvas, Web Audio API
 - **Backend**: Python 3.10+, FastAPI, SQLAlchemy, WebSockets, Pydantic
-- **Machine Learning & AI**: Scikit-Learn (TF-IDF Vectorization), Groq Llama-3.3-70B API
-- **Database**: SQLite (`studymatch.db`) with dynamic schema migration
-- **Styling**: Vanilla CSS3 custom properties (Design System tokenized architecture)
+- **ML / AI**: Scikit-Learn (TF-IDF Vectorization), Groq Llama-3.3-70B API
+- **Database**: SQLite (`studymatch.db`)
 
 ---
 
-## 🚀 Quickstart & Local Setup
+## Local Setup
 
 ### Prerequisites
-- **Node.js**: v18.0.0 or higher
-- **Python**: v3.10 or higher
-- **Groq API Key**: Get a free API key at [console.groq.com](https://console.groq.com)
+- Node.js v18+
+- Python 3.10+
+- Groq API Key (Free key available at [console.groq.com](https://console.groq.com))
 
----
-
-### 1. Backend Setup
+### 1. Backend
 
 ```bash
-# Navigate to backend directory
 cd backend
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
 
-# Activate virtual environment
-# Windows:
+# On Windows:
 .venv\Scripts\activate
-# macOS/Linux:
+# On macOS/Linux:
 source .venv/bin/activate
 
-# Install Python dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Create .env configuration file
+# Create environment file from template
 cp .env.example .env
 
-# Add your Groq API Key to backend/.env:
-# GROQ_API_KEY=gsk_your_actual_api_key_here
+# Set your API Key in backend/.env:
+# GROQ_API_KEY=your_groq_api_key_here
 
-# Launch FastAPI backend server
+# Start backend server
 python -m uvicorn main:app --reload --port 8000
 ```
-*The backend server will run on `http://localhost:8000` (API Docs available at `http://localhost:8000/docs`).*
 
----
+The backend server will start at `http://localhost:8000`.
 
-### 2. Frontend Setup
+### 2. Frontend
 
 ```bash
-# Open a new terminal and navigate to frontend directory
 cd frontend
 
-# Install Node modules
+# Install Node dependencies
 npm install
 
-# Start Vite development server
+# Start Vite dev server
 npm run dev
 ```
-*The web application will launch locally at `http://localhost:5173`.*
+
+The web client will start at `http://localhost:5173`.
 
 ---
 
-## 📦 Production Deployment
+## Deployment
 
-### Frontend (Netlify / Vercel)
-The repository includes a pre-configured [netlify.toml](frontend/netlify.toml) file supporting Single-Page Application (SPA) routing:
-- **Build Command**: `npm run build`
-- **Publish Directory**: `dist`
-- **Environment Variable**: Set `VITE_API_BASE_URL` to your live FastAPI backend URL.
-
-### Backend (Render / Railway / Fly.io)
-The repository includes a [Procfile](backend/Procfile) for containerized web execution:
-- **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- **Environment Variable**: Set `GROQ_API_KEY` in server environment settings.
+- **Frontend (Netlify / Vercel)**: Includes a `netlify.toml` for single-page routing. Set `VITE_API_BASE_URL` to your backend URL in environment settings.
+- **Backend (Render / Railway)**: Includes a `Procfile` (`uvicorn main:app --host 0.0.0.0 --port $PORT`). Set `GROQ_API_KEY` in server environment settings.
 
 ---
 
-## 📜 License
+## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License.
