@@ -188,17 +188,19 @@ async def _ws_broadcast(session_id: str, event: dict, exclude: WebSocket | None 
 # Email helper
 # ---------------------------------------------------------------------------
 
-def _send_verification_email(to_addr: str, pin: str):
-    """Send a branded verification email. Falls back to console log if SMTP not configured."""
+def _send_verification_email(to_addr: str, pin: str) -> bool:
+    """Send a branded verification email. Returns True if sent via SMTP, False if demo mode."""
     smtp_host = os.environ.get("SMTP_HOST", "")
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_pass = os.environ.get("SMTP_PASS", "")
     smtp_port = int(os.environ.get("SMTP_PORT", "465"))
 
     if not smtp_host or not smtp_user or not smtp_pass:
-        print(f"[Socratic] EMAIL VERIFICATION PIN for {to_addr}: {pin}")
-        print("[Socratic] Configure SMTP_HOST / SMTP_USER / SMTP_PASS env vars to enable real email delivery.")
-        return
+        print(f"==================================================")
+        print(f"[Socratic] DEMO VERIFICATION PIN FOR {to_addr}: {pin}")
+        print("[Socratic] Configure SMTP_HOST / SMTP_USER / SMTP_PASS in .env to enable real email delivery.")
+        print(f"==================================================")
+        return False
 
     try:
         msg = MIMEMultipart("alternative")
@@ -220,8 +222,10 @@ def _send_verification_email(to_addr: str, pin: str):
         with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context) as server:
             server.login(smtp_user, smtp_pass)
             server.sendmail(smtp_user, to_addr, msg.as_string())
+        return True
     except Exception as e:
-        print(f"[Socratic] Email send failed: {e}. PIN for {to_addr}: {pin}")
+        print(f"[Socratic] Email send failed: {e}. Fallback PIN for {to_addr}: {pin}")
+        return False
 
 
 @app.on_event("startup")
@@ -1196,7 +1200,7 @@ def signup(req: AuthReq):
     print(f"==================================================")
 
     # Attempt email dispatch if SMTP is configured
-    _send_verification_email(email_clean, verification_pin)
+    sent_via_smtp = _send_verification_email(email_clean, verification_pin)
 
     return {
         "id": user_id,
@@ -1206,8 +1210,9 @@ def signup(req: AuthReq):
         "avatar_seed": req.avatar_seed or "bottts-1",
         "verified": False,
         "requires_verification": True,
-        "verification_pin": verification_pin,
-        "verification_pin_demo": verification_pin,
+        "sent_via_smtp": sent_via_smtp,
+        "verification_pin": None if sent_via_smtp else verification_pin,
+        "verification_pin_demo": None if sent_via_smtp else verification_pin,
     }
 
 

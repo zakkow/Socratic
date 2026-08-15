@@ -46,8 +46,12 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       if (mode === 'signup') {
         const result = await signupUser(name.trim(), email.trim(), password, avatarSeed);
         setPendingUser(result);
-        const code = result.verification_pin || result.verification_pin_demo || result.pin || '849201';
-        setPinInput(code);
+        if (result.sent_via_smtp || !result.verification_pin) {
+          setPinInput('');
+        } else {
+          const code = result.verification_pin || result.verification_pin_demo || '849201';
+          setPinInput(code);
+        }
         setStep('verify_pin');
       } else {
         const user = await loginUser(email.trim(), password);
@@ -212,7 +216,26 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }) {
           /* STEP 2: VERIFY PIN */
           <form onSubmit={handleVerifyPin}>
             {(() => {
-              const displayPin = pendingUser?.verification_pin || pendingUser?.verification_pin_demo || pendingUser?.pin || pinInput || '849201';
+              const hasRealSmtp = pendingUser?.sent_via_smtp;
+              const displayPin = pendingUser?.verification_pin || pendingUser?.verification_pin_demo;
+
+              if (hasRealSmtp || !displayPin) {
+                return (
+                  <div style={{ background: '#F8FAFC', border: 'var(--border-thick)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-primary-deep)', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                      <Mail size={18} strokeWidth={2.5} />
+                      <span>Check Your .edu Inbox</span>
+                    </div>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--color-ink)', margin: '0.2rem 0', lineHeight: 1.4 }}>
+                      We sent a 6-digit verification code to <strong>{pendingUser?.email || 'your email'}</strong>.
+                    </p>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+                      Please enter the code from your email to activate your account.
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div style={{ background: '#F0FDF4', border: '2px solid #22C55E', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#15803D', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
@@ -223,7 +246,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                     {displayPin}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: 600 }}>
-                    We sent this code to <strong>{pendingUser?.email || 'your email'}</strong>
+                    Demo Mode Active • Pre-filled for evaluator testing
                   </div>
                 </div>
               );
