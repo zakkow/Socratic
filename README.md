@@ -1,6 +1,6 @@
 # Socratic
 
-> Don't just get the answer. Master the concept.
+> Hit a wall? So did someone else. Socratic pairs you up and guides you both through it, not past it.
 
 Socratic is a collaborative study application designed to connect students working through difficult academic concepts. Rather than providing direct answers, the platform focuses on guided learning through peer matching, synchronized whiteboards, and a hybrid AI tutoring system.
 
