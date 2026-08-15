@@ -10,7 +10,7 @@ import { AuthModal } from './components/AuthModal';
 import { ProfileDrawer } from './components/ProfileDrawer';
 import { SessionHistoryModal } from './components/SessionHistoryModal';
 import { FriendsDrawer } from './components/FriendsDrawer';
-import { getSavedUser, setSavedUser, clearSavedUser, getActiveSession, updateUserStatus } from './api';
+import { getSavedUser, setSavedUser, clearSavedUser, getActiveSession, leaveSession, updateUserStatus } from './api';
 import { soundFX } from './utils/soundFX';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -292,10 +292,18 @@ export default function App() {
             matchData={matchData}
             onBack={() => {
               soundFX.playSoftClick();
+              if (matchData?.session_id && currentUser?.id) {
+                leaveSession(matchData.session_id, currentUser.id).catch(() => {});
+              }
+              setMatchData(null);
               setCurrentView('explore');
             }}
             onGoToQuestionBoard={() => {
               soundFX.playSoftClick();
+              if (matchData?.session_id && currentUser?.id) {
+                leaveSession(matchData.session_id, currentUser.id).catch(() => {});
+              }
+              setMatchData(null);
               setCurrentView('questions');
               showToast('Question posted to Question Board for extra classmate help!');
             }}

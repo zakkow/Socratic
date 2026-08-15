@@ -254,6 +254,15 @@ export async function getActiveSession(userId) {
   return safeParseJson(response);
 }
 
+export async function leaveSession(sessionId, userId) {
+  const response = await fetch(`${API_BASE_URL}/match/${sessionId}/leave`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  return safeParseJson(response);
+}
+
 export async function getTopics(courseId = DEFAULT_COURSE_ID, category = 'All') {
   const url = `${API_BASE_URL}/topics?course_id=${encodeURIComponent(courseId)}&category=${encodeURIComponent(category)}`;
   const response = await fetch(url);

@@ -525,7 +525,12 @@ async def request_match(req: MatchRequest):
     excluded_ids = blocked_by_me | blocked_me
     active_users = [u for u in active_users if u.id not in excluded_ids]
 
-    target_state = tracker.build_state(user.id, m_topics)
+    user_id = user.id
+    user_name = user.name or "Student"
+    user_school = user.school_name or "Student"
+    user_course_id = user.course_id or "cs101"
+
+    target_state = tracker.build_state(user_id, m_topics)
     candidate_states = [tracker.build_state(u.id, m_topics) for u in active_users]
 
     result = find_best_match(target_state, candidate_states) if candidate_states else None
@@ -543,19 +548,18 @@ async def request_match(req: MatchRequest):
                 email=demo_peer["email"],
                 school_name=demo_peer["school_name"],
                 avatar_seed=demo_peer["avatar_seed"],
-                course_id=user.course_id or "cs101",
+                course_id=user_course_id,
                 active=True,
                 is_verified=True,
             )
             db.add(db_peer)
             db.commit()
-            db.refresh(db_peer)
 
         topic_name = req.topic_name
         if not topic_name:
             last_attempt = (
                 db.query(QuizAttempt)
-                .filter(QuizAttempt.user_id == user.id)
+                .filter(QuizAttempt.user_id == user_id)
                 .order_by(QuizAttempt.timestamp.desc())
                 .first()
             )
@@ -568,23 +572,23 @@ async def request_match(req: MatchRequest):
 
         db_topic = db.query(Topic).filter(Topic.name == topic_name).first()
         if not db_topic:
-            db_topic = Topic(course_id=user.course_id or "cs101", name=topic_name)
+            db_topic = Topic(course_id=user_course_id, name=topic_name)
             db.add(db_topic)
             db.commit()
             db.refresh(db_topic)
+        final_topic_id = db_topic.id
 
-        user_name = user.name or "Student"
         explanation = f"{user_name} and {demo_peer['name']} are paired based on complementary struggle-mastery profiles for {topic_name}."
 
         session = MatchSession(
-            user_a_id=user.id,
+            user_a_id=user_id,
             user_b_id=demo_peer["id"],
-            shared_topic_id=db_topic.id,
+            shared_topic_id=final_topic_id,
             explanation=explanation,
             scratchpad_content=f"""# 📝 Collaborative Study Notes: {topic_name}
 
 ## 🤝 Study Partners
-- **{user_name}** ({user.school_name or 'Student'})
+- **{user_name}** ({user_school})
 - **{demo_peer['name']}** ({demo_peer['school_name']})
 
 ## 🎯 Focus Area
@@ -609,16 +613,31 @@ async def request_match(req: MatchRequest):
 
         SESSION_SCRATCHPAD_DATA[session_id] = session.scratchpad_content
         SESSION_TOPICS[session_id] = topic_name
+        
+        intro_text = f"Hey {user_name}! I was also working through {topic_name}. Let's break down the concepts and solve it together on the whiteboard!"
         SESSION_CHAT_MESSAGES[session_id] = [
             {
-                "id": "msg-1",
+                "id": "msg-init-1",
                 "sender_id": demo_peer["id"],
                 "sender_name": demo_peer["name"],
                 "sender_avatar": demo_peer["avatar_seed"],
-                "text": demo_peer["intro_msg"],
+                "text": intro_text,
                 "timestamp": datetime.datetime.utcnow().strftime("%H:%M"),
             }
         ]
+
+        # Persist first message to DB
+        try:
+            from models import ChatMessage as ChatMessageModel
+            db.add(ChatMessageModel(
+                session_id=session_id,
+                sender_id=demo_peer["id"],
+                sender_name=demo_peer["name"],
+                text=intro_text,
+            ))
+            db.commit()
+        except Exception:
+            pass
 
         db.close()
         return {
@@ -649,34 +668,97 @@ async def request_match(req: MatchRequest):
             "message": "No study partner is available right now on this topic. Try the AI Tutor session!",
         }
 
-    topic_id = shared_topic_ids[0]
-    topic_obj = next((t for t in topics if str(t.id) == str(topic_id)), None)
-    if not topic_obj:
-        topic_obj = db.query(Topic).filter(Topic.id == topic_id).first()
+    matched_user_id = matched_user.id
+    matched_user_name = matched_user.name or "Study Partner"
+    matched_user_school = matched_user.school_name or "University"
+    matched_user_avatar = matched_user.avatar_seed or "bottts-1"
 
-    user_name = user.name
-    matched_user_id, matched_user_name = matched_user.id, matched_user.name
-    topic_name = topic_obj.name if topic_obj else "General Study Topic"
+    topic_id = shared_topic_ids[0] if shared_topic_ids else None
+    topic_obj = db.get(Topic, topic_id) if topic_id else None
+
+    topic_name = req.topic_name or (topic_obj.name if topic_obj else "Recursion & Base Cases")
+    
+    # Ensure topic exists in DB
+    db_topic = db.query(Topic).filter(Topic.name == topic_name).first()
+    if not db_topic:
+        db_topic = Topic(course_id=user_course_id, name=topic_name)
+        db.add(db_topic)
+        db.commit()
+        db.refresh(db_topic)
+    final_topic_id = db_topic.id
 
     explanation = await classifier.generate_match_explanation(
         user_name, matched_user_name, topic_name
     )
 
+    scratchpad_init = f"""# 📝 Collaborative Study Notes: {topic_name}
+
+## 🤝 Study Partners
+- **{user_name}** ({user_school})
+- **{matched_user_name}** ({matched_user_school})
+
+## 🎯 Focus Area
+- Exploring key principles and solving problems for **{topic_name}**.
+
+## 💡 Working Steps
+1. **Problem Statement & Objectives**:
+   - Write out the initial equation or problem constraints.
+2. **Formulas & Core Principles**:
+   - What fundamental rule or theorem applies here?
+3. **Step-by-Step Derivation**:
+   - Work through step 1:
+   - Work through step 2:
+4. **Verification & Edge Cases**:
+   - Check edge cases to verify the solution.
+"""
+
     session = MatchSession(
-        user_a_id=user.id,
+        user_a_id=user_id,
         user_b_id=matched_user_id,
-        shared_topic_id=topic_id,
+        shared_topic_id=final_topic_id,
         explanation=explanation,
+        scratchpad_content=scratchpad_init,
     )
     db.add(session)
     db.commit()
+    db.refresh(session)
     session_id = session.id
+
+    intro_text = f"Hey {user_name}! I was also working through {topic_name}. Let's break down the concepts and solve it together on the whiteboard!"
+    SESSION_SCRATCHPAD_DATA[session_id] = scratchpad_init
+    SESSION_TOPICS[session_id] = topic_name
+    SESSION_CHAT_MESSAGES[session_id] = [
+        {
+            "id": "msg-init-1",
+            "sender_id": matched_user_id,
+            "sender_name": matched_user_name,
+            "sender_avatar": matched_user_avatar,
+            "text": intro_text,
+            "timestamp": datetime.datetime.utcnow().strftime("%H:%M"),
+        }
+    ]
+
+    try:
+        from models import ChatMessage as ChatMessageModel
+        db.add(ChatMessageModel(
+            session_id=session_id,
+            sender_id=matched_user_id,
+            sender_name=matched_user_name,
+            text=intro_text,
+        ))
+        db.commit()
+    except Exception:
+        pass
+
     db.close()
 
     return {
         "matched": True,
         "session_id": session_id,
         "partner_name": matched_user_name,
+        "partner_id": matched_user_id,
+        "partner_avatar": matched_user_avatar,
+        "partner_school": matched_user_school,
         "shared_topic": topic_name,
         "match_score": round(score, 3),
         "explanation": explanation,
@@ -1265,6 +1347,62 @@ def delete_user(user_id: str):
     return {"ok": True, "message": "User account permanently deleted."}
 
 
+class LeaveSessionReq(BaseModel):
+    user_id: str
+
+
+@app.post("/match/{session_id}/leave")
+def leave_session(session_id: str, req: LeaveSessionReq):
+    """Mark session as ended for the user who left, and transition staying student to AI tutor."""
+    db = get_db()
+    try:
+        leaving_user_id = req.user_id
+        session = db.get(MatchSession, session_id)
+        if session:
+            session.ended_at = datetime.datetime.utcnow()
+            staying_user_id = session.user_b_id if session.user_a_id == leaving_user_id else session.user_a_id
+
+            # If staying partner is a human student, transition them to Socratic AI Tutor
+            if staying_user_id and not staying_user_id.startswith("demo-peer") and staying_user_id != "ai-tutor-bot":
+                topic_obj = db.get(Topic, session.shared_topic_id)
+                topic_name = topic_obj.name if topic_obj else "Study Session"
+                
+                ai_session = MatchSession(
+                    user_a_id=staying_user_id,
+                    user_b_id="ai-tutor-bot",
+                    shared_topic_id=session.shared_topic_id,
+                    explanation="Your study partner left the session. Socratic AI Tutor has stepped in to continue guiding you!",
+                    scratchpad_content=session.scratchpad_content or "",
+                    canvas_content=session.canvas_content or "",
+                )
+                db.add(ai_session)
+                SESSION_SCRATCHPAD_DATA[ai_session.id] = session.scratchpad_content or ""
+                SESSION_CANVAS_DATA[ai_session.id] = session.canvas_content or ""
+                SESSION_TOPICS[ai_session.id] = topic_name
+                SESSION_CHAT_MESSAGES[ai_session.id] = [
+                    {
+                        "id": "msg-trans-1",
+                        "sender_id": "ai-tutor-bot",
+                        "sender_name": "Socratic AI Tutor",
+                        "sender_avatar": "bottts-4",
+                        "text": f"Your study partner has stepped away, but I am here to help you finish! Let's continue working through {topic_name}. What part would you like to explore next?",
+                        "timestamp": datetime.datetime.utcnow().strftime("%H:%M")
+                    }
+                ]
+            db.add(session)
+
+        # Also expire any other open sessions for this leaving user
+        db.query(MatchSession).filter(
+            MatchSession.ended_at.is_(None),
+            (MatchSession.user_a_id == leaving_user_id) | (MatchSession.user_b_id == leaving_user_id)
+        ).update({"ended_at": datetime.datetime.utcnow()}, synchronize_session=False)
+
+        db.commit()
+    finally:
+        db.close()
+    return {"ok": True, "message": "Left study session."}
+
+
 @app.get("/users/{user_id}/active-session")
 def get_active_session(user_id: str):
     """Return the user's active (non-expired) session, if any."""
@@ -1634,8 +1772,33 @@ SESSION_TOPICS: dict = {}  # session_id -> topic name for AI tutor context
 def start_direct_session(req: DirectMatchReq):
     session_id = f"sess-ai-{int(datetime.datetime.utcnow().timestamp())}"
     topic = req.topic_name or "Recursion & Base Cases"
+    
+    db = get_db()
+    user = db.get(User, req.user_id)
+    if not user:
+        user = User(
+            id=req.user_id,
+            name="Student",
+            course_id="cs101",
+            school_name="University",
+            avatar_seed="bottts-1",
+            active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    SESSION_SCRATCHPAD_DATA[session_id] = f"""# 🧠 Socratic Study Session: {topic}
+    user_name = user.name or "Student"
+
+    db_topic = db.query(Topic).filter(Topic.name == topic).first()
+    if not db_topic:
+        db_topic = Topic(course_id=user.course_id or "cs101", name=topic)
+        db.add(db_topic)
+        db.commit()
+        db.refresh(db_topic)
+
+    scratchpad_init = f"""# 🧠 Socratic Study Session: {topic}
 
 ## 🎯 Learning Objectives
 - Breakdown key concepts for **{topic}**.
@@ -1656,17 +1819,42 @@ def start_direct_session(req: DirectMatchReq):
 *💡 Use the Chat panel on the right to converse step-by-step with your Socratic AI Tutor!*
 """
 
+    session = MatchSession(
+        id=session_id,
+        user_a_id=user.id,
+        user_b_id="ai-tutor-bot",
+        shared_topic_id=db_topic.id,
+        explanation="Matched with Socratic AI Tutor for 1-on-1 step-by-step guided problem solving.",
+        scratchpad_content=scratchpad_init,
+    )
+    db.add(session)
+    db.commit()
+
+    intro_text = f"Hello {user_name}! I am your Socratic AI Tutor for {topic}. What specific part of this problem would you like to explore first?"
+    try:
+        from models import ChatMessage as ChatMessageModel
+        db.add(ChatMessageModel(
+            session_id=session_id,
+            sender_id="ai-tutor-bot",
+            sender_name="Socratic AI Tutor",
+            text=intro_text,
+        ))
+        db.commit()
+    except Exception:
+        pass
+    db.close()
+
+    SESSION_SCRATCHPAD_DATA[session_id] = scratchpad_init
     SESSION_CHAT_MESSAGES[session_id] = [
         {
-            "id": "msg-1",
+            "id": "msg-init-ai",
             "sender_id": "ai-tutor-bot",
             "sender_name": "Socratic AI Tutor",
             "sender_avatar": "bottts-4",
-            "text": f"Hello! I am your Socratic AI Tutor for {topic}. What specific part of this problem would you like to explore first?",
-            "timestamp": "Just now"
+            "text": intro_text,
+            "timestamp": datetime.datetime.utcnow().strftime("%H:%M")
         }
     ]
-
     SESSION_TOPICS[session_id] = topic
 
     return {
