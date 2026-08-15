@@ -288,11 +288,11 @@ export async function submitQuizAttempt(userId, freeText, isCorrect, proficiency
   return data;
 }
 
-export async function requestMatch(userId) {
+export async function requestMatch(userId, topicName = '') {
   const response = await fetch(`${API_BASE_URL}/match/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
+    body: JSON.stringify({ user_id: userId, topic_name: topicName, allow_demo_peer: true }),
   });
 
   const data = await safeParseJson(response);

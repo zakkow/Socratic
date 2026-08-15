@@ -21,26 +21,32 @@ export function MatchRevealScreen({
   // Poll matching engine
   useEffect(() => {
     let timerId;
+    let isMounted = true;
 
     const runMatchSearch = async () => {
       try {
-        const res = await requestMatch(currentUser.id);
-        if (res.matched) {
+        const res = await requestMatch(currentUser.id, topicName);
+        if (res.matched && isMounted) {
           soundFX.playSuccess();
           setMatchData(res);
           setMatchState('matched');
           onMatchFound(res);
         }
       } catch (err) {
-        setErrorMessage(err.message);
+        if (isMounted) setErrorMessage(err.message);
       }
     };
 
-    runMatchSearch();
+    // Brief scanning radar animation before revealing matched classmate
+    const scanTimer = setTimeout(runMatchSearch, 1800);
     timerId = setInterval(runMatchSearch, 3000);
 
-    return () => clearInterval(timerId);
-  }, [currentUser.id]);
+    return () => {
+      isMounted = false;
+      clearTimeout(scanTimer);
+      clearInterval(timerId);
+    };
+  }, [currentUser.id, topicName]);
 
   // 60-Second Countdown Timer
   useEffect(() => {
@@ -58,6 +64,21 @@ export function MatchRevealScreen({
 
     return () => clearInterval(interval);
   }, [matchState]);
+
+  const handleInstantDemoMatch = async () => {
+    soundFX.playSoftClick();
+    try {
+      const res = await requestMatch(currentUser.id, topicName);
+      if (res.matched) {
+        soundFX.playSuccess();
+        setMatchData(res);
+        setMatchState('matched');
+        onMatchFound(res);
+      }
+    } catch (err) {
+      setErrorMessage(err.message);
+    }
+  };
 
   const handleLaunchAiMatch = async () => {
     soundFX.playSoftClick();
@@ -112,15 +133,20 @@ export function MatchRevealScreen({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
             <Clock size={15} strokeWidth={2.5} />
-            <span>Searching queue ({60 - secondsElapsed}s remaining)</span>
+            <span>Scanning live peer queue ({60 - secondsElapsed}s)</span>
           </div>
 
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button className="btn-secondary" onClick={() => setMatchState('timeout_options')} style={{ fontSize: '0.85rem' }}>
-              <span>View Options</span>
+            <button className="btn-primary" onClick={handleInstantDemoMatch} style={{ fontSize: '0.85rem' }}>
+              <Sparkles size={15} strokeWidth={2.5} />
+              <span>⚡ Fast-Match Demo Classmate</span>
+            </button>
+            <button className="btn-secondary" onClick={handleLaunchAiMatch} style={{ fontSize: '0.85rem' }}>
+              <Bot size={15} strokeWidth={2.5} />
+              <span>🤖 Socratic AI Tutor</span>
             </button>
             <button className="btn-secondary" onClick={onBackToExplore} style={{ fontSize: '0.85rem' }}>
-              <span>Cancel Search</span>
+              <span>Cancel</span>
             </button>
           </div>
         </div>

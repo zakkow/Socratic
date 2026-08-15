@@ -305,8 +305,46 @@ class QuizAttemptRequest(BaseModel):
     correct: bool
 
 
+DEMO_CLASSMATES = [
+    {
+        "id": "demo-peer-elena",
+        "name": "Elena Rostova",
+        "email": "elena.rostova@stanford.edu",
+        "school_name": "Stanford University",
+        "avatar_seed": "bottts-2",
+        "intro_msg": "Hey! I was also working through this topic. Let's break down the problem together on the whiteboard!",
+    },
+    {
+        "id": "demo-peer-jordan",
+        "name": "Jordan Blake",
+        "email": "jordan.blake@berkeley.edu",
+        "school_name": "UC Berkeley",
+        "avatar_seed": "bottts-3",
+        "intro_msg": "Hi! Great timing, I was just reviewing this section. Should we start with the core concepts?",
+    },
+    {
+        "id": "demo-peer-sam",
+        "name": "Sam Patel",
+        "email": "sam.patel@mit.edu",
+        "school_name": "MIT",
+        "avatar_seed": "bottts-5",
+        "intro_msg": "Hey! Let's solve a practice problem step-by-step. Let me know what step you're on!",
+    },
+    {
+        "id": "demo-peer-maya",
+        "name": "Maya Lin",
+        "email": "maya.lin@columbia.edu",
+        "school_name": "Columbia University",
+        "avatar_seed": "bottts-6",
+        "intro_msg": "Hello! Excited to study together. Feel free to write out formulas on the scratchpad or draw on canvas!",
+    },
+]
+
+
 class MatchRequest(BaseModel):
     user_id: str
+    topic_name: str | None = None
+    allow_demo_peer: bool = True
 
 
 class BlockRequest(BaseModel):
@@ -481,9 +519,112 @@ async def request_match(req: MatchRequest):
     candidate_states = [tracker.build_state(u.id, m_topics) for u in active_users]
 
     result = find_best_match(target_state, candidate_states) if candidate_states else None
+    if (result is None or not active_users) and req.allow_demo_peer:
+        # Seamlessly match with a simulated high-affinity demo classmate
+        import random
+        demo_peer = random.choice(DEMO_CLASSMATES)
+
+        # Ensure demo peer exists in DB
+        db_peer = db.get(User, demo_peer["id"])
+        if not db_peer:
+            db_peer = User(
+                id=demo_peer["id"],
+                name=demo_peer["name"],
+                email=demo_peer["email"],
+                school_name=demo_peer["school_name"],
+                avatar_seed=demo_peer["avatar_seed"],
+                course_id=user.course_id or "cs101",
+                active=True,
+                is_verified=True,
+            )
+            db.add(db_peer)
+            db.commit()
+            db.refresh(db_peer)
+
+        topic_name = req.topic_name
+        if not topic_name:
+            last_attempt = (
+                db.query(QuizAttempt)
+                .filter(QuizAttempt.user_id == user.id)
+                .order_by(QuizAttempt.timestamp.desc())
+                .first()
+            )
+            if last_attempt:
+                t = db.get(Topic, last_attempt.topic_id)
+                if t:
+                    topic_name = t.name
+        if not topic_name:
+            topic_name = "Recursion & Base Cases"
+
+        db_topic = db.query(Topic).filter(Topic.name == topic_name).first()
+        if not db_topic:
+            db_topic = Topic(course_id=user.course_id or "cs101", name=topic_name)
+            db.add(db_topic)
+            db.commit()
+            db.refresh(db_topic)
+
+        user_name = user.name or "Student"
+        explanation = f"{user_name} and {demo_peer['name']} are paired based on complementary struggle-mastery profiles for {topic_name}."
+
+        session = MatchSession(
+            user_a_id=user.id,
+            user_b_id=demo_peer["id"],
+            shared_topic_id=db_topic.id,
+            explanation=explanation,
+            scratchpad_content=f"""# 📝 Collaborative Study Notes: {topic_name}
+
+## 🤝 Study Partners
+- **{user_name}** ({user.school_name or 'Student'})
+- **{demo_peer['name']}** ({demo_peer['school_name']})
+
+## 🎯 Focus Area
+- Exploring key principles and solving problems for **{topic_name}**.
+
+## 💡 Working Steps
+1. **Problem Statement & Objectives**:
+   - Write out the initial equation or problem constraints.
+2. **Formulas & Core Principles**:
+   - What fundamental rule or theorem applies here?
+3. **Step-by-Step Derivation**:
+   - Work through step 1:
+   - Work through step 2:
+4. **Verification & Edge Cases**:
+   - Check edge cases to verify the solution.
+""",
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        session_id = session.id
+
+        SESSION_SCRATCHPAD_DATA[session_id] = session.scratchpad_content
+        SESSION_TOPICS[session_id] = topic_name
+        SESSION_CHAT_MESSAGES[session_id] = [
+            {
+                "id": "msg-1",
+                "sender_id": demo_peer["id"],
+                "sender_name": demo_peer["name"],
+                "sender_avatar": demo_peer["avatar_seed"],
+                "text": demo_peer["intro_msg"],
+                "timestamp": datetime.datetime.utcnow().strftime("%H:%M"),
+            }
+        ]
+
+        db.close()
+        return {
+            "matched": True,
+            "session_id": session_id,
+            "partner_name": demo_peer["name"],
+            "partner_id": demo_peer["id"],
+            "partner_avatar": demo_peer["avatar_seed"],
+            "partner_school": demo_peer["school_name"],
+            "shared_topic": topic_name,
+            "match_score": 0.94,
+            "explanation": explanation,
+        }
+
     if result is None or not active_users:
         db.close()
-        # No real peer available — return honest response so the UI can show a proper state
         return {
             "matched": False,
             "message": "No study partner is available right now on this topic. Try the AI Tutor session, or check back in a few minutes!",
@@ -1586,31 +1727,43 @@ async def send_message(session_id: str, req: SendMsgReq):
     finally:
         db2.close()
 
-    # AI tutor reply — only for AI tutor sessions (sess-ai-*), not peer sessions
-    if "sess-ai" in session_id and req.sender_id != "ai-tutor-bot":
-        topic = SESSION_TOPICS.get(session_id, "")
-        history = SESSION_CHAT_MESSAGES[session_id]
-        ai_text = await ai_tutor.get_response(topic, history, req.text)
-        ai_reply = {
-            "id": f"msg-ai-{len(SESSION_CHAT_MESSAGES[session_id]) + 1}",
-            "sender_id": "ai-tutor-bot",
-            "sender_name": "Socratic AI Tutor",
-            "sender_avatar": "bottts-4",
-            "text": ai_text,
-            "timestamp": datetime.datetime.utcnow().strftime("%H:%M")
-        }
-        SESSION_CHAT_MESSAGES[session_id].append(ai_reply)
-        await _ws_broadcast(session_id, {"type": "chat", "payload": ai_reply})
-        # Persist AI reply too
-        db3 = get_db()
-        try:
-            from models import ChatMessage as ChatMessageModel
-            db3.add(ChatMessageModel(session_id=session_id, sender_id="ai-tutor-bot", sender_name="Socratic AI Tutor", text=ai_text))
-            db3.commit()
-        except Exception:
-            pass
-        finally:
-            db3.close()
+    # AI tutor / Demo peer reply
+    if req.sender_id != "ai-tutor-bot" and not req.sender_id.startswith("demo-peer"):
+        db_s = get_db()
+        session_obj = db_s.get(MatchSession, session_id)
+        partner_obj = db_s.get(User, session_obj.user_b_id) if session_obj and session_obj.user_b_id else None
+        db_s.close()
+
+        is_demo_session = "sess-ai" in session_id or (partner_obj and partner_obj.id.startswith("demo-peer"))
+        if is_demo_session:
+            topic = SESSION_TOPICS.get(session_id, "")
+            history = SESSION_CHAT_MESSAGES[session_id]
+            is_ai = "sess-ai" in session_id or not partner_obj
+            reply_name = "Socratic AI Tutor" if is_ai else partner_obj.name
+            reply_id = "ai-tutor-bot" if is_ai else partner_obj.id
+            reply_avatar = "bottts-4" if is_ai else (partner_obj.avatar_seed or "bottts-2")
+
+            ai_text = await ai_tutor.get_response(topic, history, req.text)
+            ai_reply = {
+                "id": f"msg-reply-{len(SESSION_CHAT_MESSAGES[session_id]) + 1}",
+                "sender_id": reply_id,
+                "sender_name": reply_name,
+                "sender_avatar": reply_avatar,
+                "text": ai_text,
+                "timestamp": datetime.datetime.utcnow().strftime("%H:%M")
+            }
+            SESSION_CHAT_MESSAGES[session_id].append(ai_reply)
+            await _ws_broadcast(session_id, {"type": "chat", "payload": ai_reply})
+            # Persist AI / peer reply too
+            db3 = get_db()
+            try:
+                from models import ChatMessage as ChatMessageModel
+                db3.add(ChatMessageModel(session_id=session_id, sender_id=reply_id, sender_name=reply_name, text=ai_text))
+                db3.commit()
+            except Exception:
+                pass
+            finally:
+                db3.close()
 
     return new_msg
 
