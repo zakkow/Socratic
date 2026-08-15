@@ -352,10 +352,19 @@ export function ScratchpadScreen({
               className="btn-secondary"
               onClick={handleAddPartnerAsFriend}
               disabled={friendReqSent}
-              style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', height: '28px' }}
+              style={{
+                padding: '0.25rem 0.6rem',
+                fontSize: '0.75rem',
+                height: '28px',
+                background: friendReqSent ? '#D1FAE5' : undefined,
+                color: friendReqSent ? '#065F46' : undefined,
+                borderColor: friendReqSent ? '#10B981' : undefined,
+                fontWeight: friendReqSent ? 700 : undefined,
+                cursor: friendReqSent ? 'default' : 'pointer',
+              }}
             >
-              <UserPlus size={13} strokeWidth={2.5} />
-              <span>{friendReqSent ? 'Request Sent' : 'Add Friend'}</span>
+              {friendReqSent ? <Check size={13} strokeWidth={2.5} /> : <UserPlus size={13} strokeWidth={2.5} />}
+              <span>{friendReqSent ? 'Sent!' : 'Add Friend'}</span>
             </button>
           )}
 
