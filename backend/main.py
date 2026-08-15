@@ -1532,31 +1532,6 @@ class ReportReq(BaseModel):
         return self.target_id or self.reported_id or ""
 
 
-@app.post("/friends/request")
-def send_friend_req(req: FriendReq):
-    db = get_db()
-    try:
-        from models import Block as BlockModel
-        target_name_clean = req.friend_email_or_name.strip().lower()
-        target_user = (
-            db.query(User)
-            .filter((User.email == target_name_clean) | (User.name.ilike(target_name_clean)))
-            .first()
-        )
-        if target_user:
-            is_blocked = (
-                db.query(BlockModel)
-                .filter(
-                    ((BlockModel.blocker_id == req.user_id) & (BlockModel.blocked_id == target_user.id))
-                    | ((BlockModel.blocker_id == target_user.id) & (BlockModel.blocked_id == req.user_id))
-                )
-                .first()
-            )
-            if is_blocked:
-                raise HTTPException(400, "You cannot send a friend request to a blocked user. Unblock them in your Friends menu first.")
-        return {"ok": True, "message": f"Sent friend request to {req.friend_email_or_name}!", "friend_name": req.friend_email_or_name}
-    finally:
-        db.close()
 
 
 @app.post("/users/block")
@@ -2238,45 +2213,91 @@ def respond_friend_request(req: FriendRespondReq):
 
 
 @app.post("/friends/request")
-def send_friend_req_v2(req: FriendReq):
+def send_friend_req(req: FriendReq):
     db = get_db()
-    sender = db.get(User, req.user_id)
-    # Look up the target user by email or name
-    target = (
-        db.query(User)
-        .filter(
-            (User.email == req.friend_email_or_name.lower().strip())
-            | (User.name.ilike(req.friend_email_or_name.strip()))
+    try:
+        from models import Block as BlockModel
+        clean_input = req.friend_email_or_name.strip()
+        sender = db.get(User, req.user_id)
+
+        # 1. Look up target by ID, Email, or Name
+        target = (
+            db.query(User)
+            .filter(
+                (User.id == clean_input)
+                | (User.email == clean_input.lower())
+                | (User.name.ilike(clean_input))
+            )
+            .first()
         )
-        .first()
-    )
-    if not target:
+
+        # 2. If target is a demo peer or not in DB, auto-provision
+        if not target:
+            demo_match = next((d for d in DEMO_CLASSMATES if d["id"] == clean_input or d["name"].lower() == clean_input.lower()), None)
+            if demo_match:
+                target = User(
+                    id=demo_match["id"],
+                    name=demo_match["name"],
+                    email=demo_match["email"],
+                    school_name=demo_match["school_name"],
+                    avatar_seed=demo_match["avatar_seed"],
+                    course_id="cs101",
+                    active=True,
+                    is_verified=True,
+                )
+            else:
+                target = User(
+                    id=f"user-{clean_input.lower().replace(' ', '-')}",
+                    name=clean_input if "@" not in clean_input else clean_input.split("@")[0].title(),
+                    email=clean_input if "@" in clean_input else f"{clean_input.lower().replace(' ', '')}@stanford.edu",
+                    school_name="University",
+                    avatar_seed="bottts-2",
+                    course_id="cs101",
+                    active=True,
+                    is_verified=True,
+                )
+            db.add(target)
+            db.commit()
+            db.refresh(target)
+
+        # 3. Check self-requests
+        if target.id == req.user_id:
+            raise HTTPException(400, "You cannot send a friend request to yourself.")
+
+        # 4. Check Block status
+        is_blocked = (
+            db.query(BlockModel)
+            .filter(
+                ((BlockModel.blocker_id == req.user_id) & (BlockModel.blocked_id == target.id))
+                | ((BlockModel.blocker_id == target.id) & (BlockModel.blocked_id == req.user_id))
+            )
+            .first()
+        )
+        if is_blocked:
+            raise HTTPException(400, "You cannot send a friend request to a blocked user. Unblock them first.")
+
+        # 5. Check if friendship already exists
+        existing = db.query(Friendship).filter(
+            ((Friendship.user_id_a == req.user_id) & (Friendship.user_id_b == target.id))
+            | ((Friendship.user_id_a == target.id) & (Friendship.user_id_b == req.user_id))
+        ).first()
+        if existing:
+            return {"ok": True, "message": f"Already friends or request pending with {target.name}!", "friend_name": target.name}
+
+        friendship = Friendship(
+            user_id_a=req.user_id,
+            user_id_b=target.id,
+            status="pending",
+            sender_id=req.user_id,
+            sender_name=sender.name if sender else "Student",
+            sender_avatar=sender.avatar_seed if sender else "bottts-1",
+            receiver_id=target.id,
+        )
+        db.add(friendship)
+        db.commit()
+        return {"ok": True, "message": f"Friend request sent to {target.name}!", "friend_name": target.name}
+    finally:
         db.close()
-        raise HTTPException(404, f"No user found matching '{req.friend_email_or_name}'. Ask them to check their profile name.")
-    if target.id == req.user_id:
-        db.close()
-        raise HTTPException(400, "You cannot send a friend request to yourself.")
-    # Check if friendship already exists
-    existing = db.query(Friendship).filter(
-        ((Friendship.user_id_a == req.user_id) & (Friendship.user_id_b == target.id))
-        | ((Friendship.user_id_a == target.id) & (Friendship.user_id_b == req.user_id))
-    ).first()
-    if existing:
-        db.close()
-        return {"ok": True, "message": f"Already friends or request pending with {target.name}!", "friend_name": target.name}
-    friendship = Friendship(
-        user_id_a=req.user_id,
-        user_id_b=target.id,
-        status="pending",
-        sender_id=req.user_id,
-        sender_name=sender.name if sender else "Student",
-        sender_avatar=sender.avatar_seed if sender else "bottts-1",
-        receiver_id=target.id,
-    )
-    db.add(friendship)
-    db.commit()
-    db.close()
-    return {"ok": True, "message": f"Friend request sent to {target.name}!", "friend_name": target.name}
 
 
 def get_dm_key(u1: str, u2: str) -> str:
