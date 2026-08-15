@@ -559,15 +559,6 @@ export function ScientificCalculator({ isOpen, onClose, onInsertToNotes }) {
               </button>
             </div>
           )}
-
-          {/* Big Action Equals Button */}
-          <button
-            onClick={handleCalculate}
-            className="btn-primary"
-            style={{ width: '100%', padding: '0.65rem', marginTop: 'auto', fontSize: '1.1rem', letterSpacing: '0.05em' }}
-          >
-            = EXECUTE CALCULATION
-          </button>
         </div>
       )}
     </div>
