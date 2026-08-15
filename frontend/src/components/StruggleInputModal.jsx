@@ -182,11 +182,6 @@ export function StruggleInputModal({
       const classified = res.classified_topic || 'Recursion & Base Cases';
       setClassifiedTopic(classified);
       soundFX.playSoftClick();
-      const callback = onStruggleSubmitted || onTopicClassified;
-      if (callback) {
-        callback(userToUse, classified);
-      }
-      onClose();
     } catch (err) {
       setErrorMessage(err.message);
     } finally {
@@ -536,16 +531,16 @@ export function StruggleInputModal({
 
           {/* Classification Output Result Card */}
           {classifiedTopic && (
-            <div style={{ background: 'var(--color-light-sage)', border: 'var(--border-thick)', borderRadius: 'var(--radius-md)', padding: '1rem', margin: '1.25rem 0' }}>
+            <div style={{ background: 'var(--color-light-sage)', border: 'var(--border-thick)', borderRadius: 'var(--radius-md)', padding: '1rem 1.15rem', margin: '1.25rem 0', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                <CheckCircle2 size={18} strokeWidth={2.5} style={{ color: 'var(--color-primary-deep)' }} />
-                <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '0.95rem' }}>
-                  Identified Concept Topic
+                <Sparkles size={18} strokeWidth={2.5} style={{ color: 'var(--color-primary-deep)' }} />
+                <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1rem', color: 'var(--color-primary-deep)' }}>
+                  This sounds like a {classifiedTopic} problem!
                 </span>
               </div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-heading)', color: 'var(--color-ink)' }}>
-                {classifiedTopic}
-              </div>
+              <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--color-ink)', lineHeight: 1.4 }}>
+                We've matched your struggle to <strong>{classifiedTopic}</strong>. Ready to pair up with a peer who can help work through it?
+              </p>
             </div>
           )}
 
@@ -553,7 +548,7 @@ export function StruggleInputModal({
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap' }}>
             {classifiedTopic ? (
               <button type="button" className="btn-primary" style={{ flex: 1 }} onClick={handleProceedToMatching}>
-                <span>Search Live Peer Match</span>
+                <span>Search Live Peers</span>
                 <ArrowRight size={18} strokeWidth={2.5} />
               </button>
             ) : (
