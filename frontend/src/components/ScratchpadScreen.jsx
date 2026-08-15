@@ -126,20 +126,16 @@ export function ScratchpadScreen({
     URL.revokeObjectURL(url);
   };
 
-  const handleAddPartnerAsFriend = async () => {
+  const handleAddPartnerAsFriend = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     soundFX.playNotification();
     setFriendReqSent(true);
     const target = matchData.partner_id || matchData.partner_name || 'Elena Rostova';
     setToastBanner(`Sent friend request to ${matchData.partner_name || target}!`);
     setTimeout(() => setToastBanner(''), 4000);
 
-    try {
-      if (currentUser?.id) {
-        await sendFriendRequest(currentUser.id, target);
-      }
-    } catch (err) {
-      // Keep friendReqSent true even if duplicate or background network error
-      setFriendReqSent(true);
+    if (currentUser?.id) {
+      sendFriendRequest(currentUser.id, target).catch(() => {});
     }
   };
 
@@ -351,11 +347,12 @@ export function ScratchpadScreen({
 
           {!isReadOnly && matchData.partner_id && matchData.partner_id !== 'ai-tutor-bot' && (
             <button
+              type="button"
               className="btn-secondary"
               onClick={handleAddPartnerAsFriend}
               disabled={friendReqSent}
               style={{
-                padding: '0.25rem 0.6rem',
+                padding: '0.25rem 0.65rem',
                 fontSize: '0.75rem',
                 height: '28px',
                 background: friendReqSent ? '#D1FAE5' : undefined,
@@ -363,6 +360,9 @@ export function ScratchpadScreen({
                 borderColor: friendReqSent ? '#10B981' : undefined,
                 fontWeight: friendReqSent ? 700 : undefined,
                 cursor: friendReqSent ? 'default' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
               }}
             >
               {friendReqSent ? <Check size={13} strokeWidth={2.5} /> : <UserPlus size={13} strokeWidth={2.5} />}

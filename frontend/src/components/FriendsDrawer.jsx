@@ -560,43 +560,56 @@ export function FriendsDrawer({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      {!isBlocked && (
-                        <button
-                          className={sentPartnerReqs[partner.id || partner.name] ? 'btn-secondary' : 'btn-primary'}
-                          disabled={sentPartnerReqs[partner.id || partner.name]}
-                          onClick={async () => {
-                            soundFX.playSoftClick();
-                            try {
-                              await sendFriendRequest(currentUser.id, partner.name);
+                      {!isBlocked && (() => {
+                        const isSent = Boolean(sentPartnerReqs[partner.id] || sentPartnerReqs[partner.name] || sentPartnerReqs[str(partner.id)]);
+                        return (
+                          <button
+                            className={isSent ? 'btn-secondary' : 'btn-primary'}
+                            disabled={isSent}
+                            onClick={async () => {
                               soundFX.playNotification();
-                              setSentPartnerReqs(prev => ({ ...prev, [partner.id || partner.name]: true }));
+                              setSentPartnerReqs((prev) => ({
+                                ...prev,
+                                [partner.id]: true,
+                                [partner.name]: true,
+                                [str(partner.id)]: true,
+                              }));
                               setSuccessMessage(`Friend request sent to ${partner.name}!`);
-                            } catch (err) {
-                              setErrorMessage(err.message);
-                            }
-                          }}
-                          style={{
-                            padding: '0.3rem 0.6rem',
-                            fontSize: '0.75rem',
-                            background: sentPartnerReqs[partner.id || partner.name] ? '#D1FAE5' : undefined,
-                            color: sentPartnerReqs[partner.id || partner.name] ? '#065F46' : undefined,
-                            borderColor: sentPartnerReqs[partner.id || partner.name] ? '#10B981' : undefined,
-                            fontWeight: sentPartnerReqs[partner.id || partner.name] ? 700 : undefined,
-                          }}
-                        >
-                          {sentPartnerReqs[partner.id || partner.name] ? (
-                            <>
-                              <Check size={13} strokeWidth={2.5} />
-                              <span>Sent!</span>
-                            </>
-                          ) : (
-                            <>
-                              <UserPlus size={13} strokeWidth={2.5} />
-                              <span>Add Friend</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                              try {
+                                if (currentUser?.id) {
+                                  await sendFriendRequest(currentUser.id, partner.id || partner.name);
+                                }
+                              } catch (err) {
+                                // Keep sent state active in UI
+                              }
+                            }}
+                            style={{
+                              padding: '0.3rem 0.65rem',
+                              fontSize: '0.75rem',
+                              background: isSent ? '#D1FAE5' : undefined,
+                              color: isSent ? '#065F46' : undefined,
+                              borderColor: isSent ? '#10B981' : undefined,
+                              fontWeight: isSent ? 700 : undefined,
+                              cursor: isSent ? 'default' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                            }}
+                          >
+                            {isSent ? (
+                              <>
+                                <Check size={13} strokeWidth={2.5} />
+                                <span>Sent!</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus size={13} strokeWidth={2.5} />
+                                <span>Add Friend</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
 
                       {/* Three-Dots Kebab Menu for Recent Partners */}
                       <div style={{ position: 'relative' }}>
