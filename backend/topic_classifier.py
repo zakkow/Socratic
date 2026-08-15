@@ -1,7 +1,22 @@
 """
 topic_classifier.py
 
-TF-IDF based topic classifier used during dev and testing when STUDYMATCH_USE_REAL_MODEL != "1".
+TF-IDF based topic classifier used as the live Tier-1 classifier.
+
+Classification pipeline (each request, synchronous fast-path):
+  1. Gibberish / vague input guard
+  2. Broad-term disambiguation
+  3. Keyword fast-path (loops, arithmetic expressions)
+  4. TF-IDF cosine similarity against the topic catalog
+
+When TF-IDF confidence falls below threshold, escalates to Groq (Tier 2)
+via ai_tutor._call_api().
+
+Note on BatchScheduler: inference_engine.BatchScheduler exists for
+self-hosted GPU inference, where batching amortizes an expensive forward
+pass across concurrent requests. TF-IDF transform against this catalog
+is sub-millisecond, so there is nothing to amortize — BatchScheduler is
+intentionally not wired here.
 """
 
 from __future__ import annotations
@@ -30,20 +45,20 @@ DEFAULT_TOPIC_DESCRIPTIONS = {
     "Matrix Multiplication": "matrix multiplication linear algebra dot product rows columns determinant rank vector transformation",
     "Probability & Combinatorics": "probability combinations permutations counting Bayes theorem expected value discrete event sample space",
     "Trigonometric Identities": "trigonometry sin cos tan pythagorean identity unit circle angle identity double angle secant cotangent",
-    
+
     # Calculus 1 (Differential)
     "Calculus 1: Limits & Continuity": "calculus 1 limits continuity epsilon delta indeterminate form L'Hopital asymptotes continuous infinity",
     "Calculus 1: Power & Chain Rule Derivatives": "calculus 1 derivative differentiation power rule product rule quotient rule chain rule tangent line velocity rate",
     "Calculus 1: Related Rates & Optimization": "calculus 1 related rates implicit differentiation optimization maximum minimum critical points concavity curve sketching",
-    
+
     # Calculus 2 (Integral & Series)
     "Calculus 2: Integration Techniques": "calculus 2 integration antiderivative substitution u-substitution integration by parts trig substitution partial fractions area under curve",
     "Calculus 2: Infinite Series & Taylor Polynomials": "calculus 2 series convergence divergence ratio test integral test p-series Taylor series Maclaurin series power series",
-    
+
     # Calculus 3 (Multivariable)
     "Calculus 3: Partial Derivatives & Gradients": "calculus 3 multivariable partial derivatives gradient vector directional derivative tangent plane saddle point Lagrange multipliers",
     "Calculus 3: Multiple Integrals & Vector Calculus": "calculus 3 double integrals triple integrals polar cylindrical spherical coordinates vector field line integral Green's theorem Stokes theorem",
-    
+
     # Humanities & Social Sciences
     "Thesis Statement Development": "thesis statement argument essay topic claim evidence rhetorical analysis outline draft",
     "MLA & APA Citation Formats": "mla apa citation format bibliography works cited in-text reference quote footnote style guide",
@@ -72,51 +87,26 @@ class TfidfTopicClassifier:
         self.doc_vectors = self.vectorizer.fit_transform(self.descriptions)
 
     def is_broad_term(self, text: str) -> bool:
-        clean = text.strip().lower()
-        return clean in BROAD_TERMS
+        return text.strip().lower() in BROAD_TERMS
 
     def get_broad_options(self, text: str) -> list[str]:
-        clean = text.strip().lower()
-        return BROAD_TERMS.get(clean, [])
-
-    async def classify_struggle(self, free_text: str) -> str:
-        if not free_text or not free_text.strip():
-            return "unknown"
-
-        clean_text = free_text.strip()
-        lower_text = clean_text.lower()
-
-        # Direct Loop keyword detection
-        if any(kw in lower_text for kw in ["loop", "for loop", "while loop", "nested loop", "iteration", "infinite loop"]):
-            return "For & While Loops"
-
-        # Direct arithmetic expression detection
-        if re.search(r'^\s*[\d\s\+\-\*/\(\)\.\,]+\s*$', clean_text) or ("/" in clean_text and re.search(r'\d+', clean_text)):
-            if not any(w in lower_text for w in ["recursion", "matrix", "derivative", "integral", "graph", "tree", "thesis"]):
-                return "Arithmetic & Order of Operations"
-
-        query_vector = self.vectorizer.transform([clean_text])
-        similarities = cosine_similarity(query_vector, self.doc_vectors)[0]
-
-        best_idx = int(np.argmax(similarities))
-        highest_score = float(similarities[best_idx])
+        return BROAD_TERMS.get(text.strip().lower(), [])
 
     def is_gibberish_or_vague(self, text: str) -> bool:
         clean = text.strip()
         if len(clean) < 3:
             return True
-        # Repeated character pattern (e.g., "helpppp", "hhhhhh", "aaaaaa")
         if re.search(r'(.)\1{3,}', clean.lower()):
             return True
-        # Random keyboard mashing or non-alphanumeric noise
         clean_alpha = re.sub(r'[^a-zA-Z0-9\s]', '', clean)
         if len(clean_alpha.strip()) < 3:
             return True
-        # Single vague non-academic terms
-        vague_terms = {"help", "helpp", "helppp", "helpppp", "pls", "please", "idk", "stuff", "test", "asdf", "asdfg", "qwerty", "aaa", "bbb", "xxx", "no", "yes", "dunno"}
-        if clean.lower() in vague_terms:
-            return True
-        return False
+        vague_terms = {
+            "help", "helpp", "helppp", "helpppp", "pls", "please",
+            "idk", "stuff", "test", "asdf", "asdfg", "qwerty",
+            "aaa", "bbb", "xxx", "no", "yes", "dunno",
+        }
+        return clean.lower() in vague_terms
 
     async def validate_and_canonicalize_topic(self, free_text: str) -> dict:
         clean_text = free_text.strip() if free_text else ""
@@ -124,23 +114,52 @@ class TfidfTopicClassifier:
         if self.is_gibberish_or_vague(clean_text):
             return {
                 "valid": False,
-                "reason": f"Your input ('{clean_text}') is too broad or non-academic. Please specify the course topic or problem (e.g. Calc 1 Chain Rule, Python Recursion, Physics Motion).",
-                "suggested_topics": ["Recursion & Base Cases", "Chain Rule & Implicit Differentiation", "Big-O Algorithmic Complexity", "Newtonian Motion & Friction Dynamics"],
+                "reason": (
+                    f"Your input ('{clean_text}') is too broad or non-academic. "
+                    "Please specify the course topic or problem "
+                    "(e.g. Calc 1 Chain Rule, Python Recursion, Physics Motion)."
+                ),
+                "suggested_topics": [
+                    "Recursion & Base Cases",
+                    "Chain Rule & Implicit Differentiation",
+                    "Big-O Algorithmic Complexity",
+                    "Newtonian Motion & Friction Dynamics",
+                ],
             }
 
-        # Check if broad term
         if self.is_broad_term(clean_text):
             options = self.get_broad_options(clean_text)
             return {
                 "valid": False,
-                "reason": f"'{clean_text}' covers multiple sub-disciplines. Please select a specific area below:",
+                "reason": (
+                    f"'{clean_text}' covers multiple sub-disciplines. "
+                    "Please select a specific area below:"
+                ),
                 "suggested_topics": options,
             }
 
-        # Run TF-IDF classification
+        lower_text = clean_text.lower()
+
+        # Keyword fast-path: loop terminology
+        if any(kw in lower_text for kw in [
+            "loop", "for loop", "while loop", "nested loop",
+            "iteration", "infinite loop",
+        ]):
+            return {"valid": True, "canonical_title": "For & While Loops", "matched_existing": True}
+
+        # Keyword fast-path: bare arithmetic expression
+        if re.search(r'^\s*[\d\s\+\-\*/\(\)\.\,]+\s*$', clean_text) or (
+            "/" in clean_text and re.search(r'\d+', clean_text)
+        ):
+            if not any(w in lower_text for w in [
+                "recursion", "matrix", "derivative",
+                "integral", "graph", "tree", "thesis",
+            ]):
+                return {"valid": True, "canonical_title": "Arithmetic & Order of Operations", "matched_existing": True}
+
+        # TF-IDF cosine similarity
         query_vector = self.vectorizer.transform([clean_text])
         similarities = cosine_similarity(query_vector, self.doc_vectors)[0]
-
         best_idx = int(np.argmax(similarities))
         highest_score = float(similarities[best_idx])
 
@@ -151,25 +170,24 @@ class TfidfTopicClassifier:
                 "matched_existing": True,
             }
 
-        # Check if it contains numbers/math operators
+        # Math operator fallback before escalation
         if re.search(r'[\d\+\-\*/=]', clean_text):
-            return {
-                "valid": True,
-                "canonical_title": "Arithmetic & Order of Operations",
-                "matched_existing": True,
-            }
+            return {"valid": True, "canonical_title": "Arithmetic & Order of Operations", "matched_existing": True}
 
-        # Escalation Tier: Low local TF-IDF confidence -> Escalate to LLM reasoning model for academic judgment
+        # Tier-2 escalation: low TF-IDF confidence → Groq academic judgment
         try:
             from ai_tutor import ai_tutor
             if ai_tutor.is_ai_enabled:
                 system_prompt = (
-                    "You are an Academic Topic Classification Judge. Determine if the student input is a legitimate academic concept, or unclassifiable noise/spam.\n"
-                    "Format response as strictly JSON: {\"is_academic\": true, \"canonical_title\": \"Clean Title\", \"reason\": \"Explanation\"}"
+                    "You are an Academic Topic Classification Judge. "
+                    "Determine if the student input is a legitimate academic concept, "
+                    "or unclassifiable noise/spam.\n"
+                    "Format response as strictly JSON: "
+                    "{\"is_academic\": true, \"canonical_title\": \"Clean Title\", \"reason\": \"Explanation\"}"
                 )
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Student Input: {clean_text}"}
+                    {"role": "user", "content": f"Student Input: {clean_text}"},
                 ]
                 raw = await ai_tutor._call_api(messages, max_tokens=90, temperature=0.2)
                 if raw:
@@ -184,26 +202,40 @@ class TfidfTopicClassifier:
                     else:
                         return {
                             "valid": False,
-                            "reason": data.get("reason", f"'{clean_text}' does not appear to be a standard course topic. Please describe the specific subject."),
-                            "suggested_topics": ["Recursion & Base Cases", "Chain Rule & Implicit Differentiation", "Thesis Statement Development"],
+                            "reason": data.get(
+                                "reason",
+                                f"'{clean_text}' does not appear to be a standard course topic. "
+                                "Please describe the specific subject.",
+                            ),
+                            "suggested_topics": [
+                                "Recursion & Base Cases",
+                                "Chain Rule & Implicit Differentiation",
+                                "Thesis Statement Development",
+                            ],
                         }
         except Exception:
             pass
 
-        # Local Fallback check if it has enough words to be a valid custom academic topic
+        # Local fallback: enough words to be a plausible custom topic
         words = [w for w in clean_text.split() if len(w) >= 3]
         if len(words) >= 2:
-            canonical_title = " ".join(words[:4]).title()
             return {
                 "valid": True,
-                "canonical_title": canonical_title,
+                "canonical_title": " ".join(words[:4]).title(),
                 "matched_existing": False,
             }
 
         return {
             "valid": False,
-            "reason": f"'{clean_text}' needs a bit more context. Please describe the specific concept or subject you are working on.",
-            "suggested_topics": ["Recursion & Base Cases", "Chain Rule & Implicit Differentiation", "Thesis Statement Development"],
+            "reason": (
+                f"'{clean_text}' needs a bit more context. "
+                "Please describe the specific concept or subject you are working on."
+            ),
+            "suggested_topics": [
+                "Recursion & Base Cases",
+                "Chain Rule & Implicit Differentiation",
+                "Thesis Statement Development",
+            ],
         }
 
     async def classify_struggle(self, free_text: str) -> str:

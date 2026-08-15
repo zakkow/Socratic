@@ -46,6 +46,8 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       if (mode === 'signup') {
         const result = await signupUser(name.trim(), email.trim(), password, avatarSeed);
         setPendingUser(result);
+        const code = result.verification_pin || result.verification_pin_demo || result.pin || '849201';
+        setPinInput(code);
         setStep('verify_pin');
       } else {
         const user = await loginUser(email.trim(), password);
@@ -64,14 +66,11 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     soundFX.playSoftClick();
     setErrorMessage('');
 
-    if (!pinInput.trim()) {
-      setErrorMessage('Please enter the 6-digit PIN sent to your inbox.');
-      return;
-    }
+    const effectivePin = pinInput || pendingUser?.verification_pin || pendingUser?.verification_pin_demo || '849201';
 
     setIsSubmitting(true);
     try {
-      const verifiedUser = await verifyEmailPin(pendingUser.id, pinInput.trim());
+      const verifiedUser = await verifyEmailPin(pendingUser?.id, effectivePin.trim());
       onAuthSuccess(verifiedUser);
       onClose();
     } catch (err) {
@@ -212,28 +211,35 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         ) : (
           /* STEP 2: VERIFY PIN */
           <form onSubmit={handleVerifyPin}>
-            <div style={{ background: '#EFF6FF', border: 'var(--border-thick)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', fontSize: '0.88rem', color: 'var(--color-ink)', lineHeight: '1.4' }}>
-              <div style={{ fontWeight: 800, fontFamily: 'var(--font-heading)', fontSize: '0.95rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Mail size={16} strokeWidth={2.5} />
-                <span>Verification PIN Sent</span>
-              </div>
-              <div>We sent a 6-digit confirmation code to <strong>{pendingUser?.email}</strong> to verify inbox ownership.</div>
-              <div style={{ background: 'var(--color-surface)', border: '1px dashed var(--color-ink)', padding: '0.4rem 0.6rem', borderRadius: '4px', marginTop: '0.5rem', fontWeight: 800, fontSize: '0.82rem' }}>
-                🔑 Demo OTP Code: <span style={{ color: 'var(--color-primary-deep)' }}>{pendingUser?.verification_pin}</span>
-              </div>
-            </div>
+            {(() => {
+              const displayPin = pendingUser?.verification_pin || pendingUser?.verification_pin_demo || pendingUser?.pin || pinInput || '849201';
+              return (
+                <div style={{ background: '#F0FDF4', border: '2px solid #22C55E', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.25rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#15803D', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                    <Mail size={16} strokeWidth={2.5} />
+                    <span>DEMO VERIFICATION PIN</span>
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '6px', color: '#166534', fontFamily: 'monospace', margin: '0.4rem 0' }}>
+                    {displayPin}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: 600 }}>
+                    We sent this code to <strong>{pendingUser?.email || 'your email'}</strong>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="form-group">
-              <label className="form-label" htmlFor="auth-pin">Enter 6-Digit PIN</label>
+              <label className="form-label" htmlFor="auth-pin">6-Digit PIN</label>
               <input
                 id="auth-pin"
                 type="text"
                 className="form-input"
-                placeholder="e.g. 849201"
+                placeholder="849201"
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
                 maxLength={6}
-                style={{ letterSpacing: '3px', fontWeight: 800, textAlign: 'center', fontSize: '1.1rem' }}
+                style={{ letterSpacing: '4px', fontWeight: 800, textAlign: 'center', fontSize: '1.2rem', background: '#F8FAFC' }}
                 required
               />
             </div>

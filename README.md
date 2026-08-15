@@ -107,15 +107,46 @@ The web client will start at `http://localhost:5173`.
 
 ---
 
+## Email Verification & Authentication
+
+Socratic requires students to sign up with a valid university email ending in `.edu`.
+
+### 1. Demo OTP Mode (Default)
+By default, Socratic runs in **Demo OTP mode** with zero email server setup required:
+1. Enter your name, `.edu` email (e.g. `alex@stanford.edu`), and password.
+2. The system generates a 6-digit PIN, displays it on the verification card, and pre-fills the input.
+3. Click **"Verify .edu Inbox & Enter Socratic"** to complete registration.
+4. The PIN is also logged to the backend console.
+
+### 2. Real Email Delivery via Gmail SMTP (Optional)
+To send real one-time PIN codes directly to actual user inboxes:
+1. Go to your [Google Account Security Settings](https://myaccount.google.com/security) and ensure **2-Step Verification** is turned ON.
+2. Generate an App Password at [Google App Passwords](https://myaccount.google.com/apppasswords) (select app name e.g. "Socratic").
+3. Add the following variables to your `backend/.env` (or Render Environment Variables):
+   ```env
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_USER=your_email@gmail.com
+   SMTP_PASS=your_16_letter_app_password
+   ```
+*(You can also use SendGrid, Mailgun, or Resend by updating `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS` accordingly).*
+
+---
+
 ## Deployment
 
-- **Frontend (Netlify / Vercel)**: Includes a `netlify.toml` for single-page routing. Set `VITE_API_BASE_URL` to your backend URL in environment settings.
-- **Backend (Render / Railway)**: Includes a `Procfile` (`uvicorn main:app --host 0.0.0.0 --port $PORT`). Set `GROQ_API_KEY` in server environment settings.
+- **Frontend (Netlify / Vercel)**:
+  - Deployed from the `frontend/` directory with `netlify.toml` for client-side routing.
+  - Set the `VITE_API_BASE_URL` environment variable in Netlify to your Render backend URL (e.g. `https://socratic-backend.onrender.com`).
+- **Backend (Render / Railway)**:
+  - Deployed using the root `Procfile` (`uvicorn main:app --host 0.0.0.0 --port $PORT`).
+  - Set `GROQ_API_KEY` (and optional `SMTP_*` variables) in Render's Environment settings.
 
-> **Note on cold starts**: The backend is hosted on Render's free tier, which spins down after 15 minutes of inactivity. The first request after a period of inactivity may take up to 60 seconds to respond while the server wakes up. Subsequent requests are fast. For demos, visit the site a minute or two before presenting to warm the backend up.
+> **Note on Render Free Tier Cold Starts**: The backend is hosted on Render's free tier, which spins down after 15 minutes of inactivity. When visiting the site after a period of inactivity, the first request may take ~30–50 seconds while the server wakes up. Subsequent requests are fast. You do not need to keep the Render dashboard open—requests from Netlify wake it up automatically.
 
 ---
 
 ## License
 
 Distributed under the MIT License.
+
